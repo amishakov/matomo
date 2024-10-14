@@ -404,6 +404,17 @@ class RangeTest extends BasePeriodTest
         $this->assertEquals('2006-12-01,2007-01-31', $range->getRangeString());
     }
 
+    // test range date1,date2
+    public function testRangeMonthcommaAfterMaxAllowedDate()
+    {
+        Date::$now = strtotime('2024-07-09');
+        $range = new Range('month', '2024-01-01,2100-01-03');
+
+        // range should be limited to 2034, so includes 11 years
+        $this->assertEquals(11 * 12, $range->getNumberOfSubperiods());
+        $this->assertEquals('2024-01-01,2034-12-31', $range->getRangeString());
+    }
+
     // test range WEEK
     public function testRangeWeek()
     {
@@ -1215,6 +1226,28 @@ class RangeTest extends BasePeriodTest
         $range->getPrettyString();
     }
 
+    /**
+     * @dataProvider getAbnormalDateRanges
+     */
+    public function testCustomRangeWithOutOfRangeDate($dateStr)
+    {
+        self::expectException(Exception::class);
+
+        $range = new Range('range', $dateStr);
+        $range->getDateStart();
+    }
+
+    public function getAbnormalDateRanges(): iterable
+    {
+        yield 'range starts before first website creation' => [
+            '1900-01-01,2021-01-01',
+        ];
+
+        yield 'range starts after it ends' => [
+            '2024-01-01,2020-12-16',
+        ];
+    }
+
     public function testCustomRangeLastN()
     {
         $range = new Range('range', 'last4');
@@ -1272,7 +1305,7 @@ class RangeTest extends BasePeriodTest
     public function testGetLocalizedLongString()
     {
         $month = new Range('range', '2023-05-09,2023-05-21');
-        $shouldBe = 'May 8 – 21, 2023';
+        $shouldBe = 'May 9 – 21, 2023';
         $this->assertEquals($shouldBe, $month->getLocalizedLongString());
     }
 

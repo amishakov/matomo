@@ -37,6 +37,7 @@
         "ClickHere": "Click here for more information.",
         "ClickToRemoveComp": "Click to remove this comparison.",
         "ClickToSearch": "Click to search",
+        "ClickX": "Click \"%1$s\".",
         "Close": "Close",
         "ColumnActionsPerVisit": "Actions per Visit",
         "ColumnActionsPerVisitDocumentation": "The average number of actions (page views, site searches, downloads or outlinks) that were performed during the visits.",
@@ -120,6 +121,7 @@
         "Continue": "Continue",
         "ContinueToPiwik": "Continue to Matomo",
         "Copy": "Copy",
+        "CopiedToClipboard": "Copied to clipboard",
         "CreatedByUser": "created by %s",
         "CreationDate": "Creation date",
         "CurrentMonth": "Current Month",
@@ -373,6 +375,8 @@
         "PleaseUpgradeYourPhpVersionSoYourPiwikDataStaysSecure": "Please upgrade your PHP version to at least PHP %s so your Matomo analytics data stays secure.",
         "Plugin": "Plugin",
         "Plugins": "Plugins",
+        "ManageSubscriptions": "Manage Subscriptions",
+        "ManagePlugins": "Manage Plugins",
         "PoweredBy": "Powered by",
         "Previous": "Previous",
         "PreviousDays": "Previous %s days (not including today)",
@@ -538,7 +542,9 @@
         "YourChangesHaveBeenSaved": "Your changes have been saved.",
         "YourSessionHasExpired": "Your session has expired due to inactivity. Please log in to continue.",
         "Update": "Update",
-        "Create": "Create"
+        "Create": "Create",
+        "CreatePassword": "Create Password",
+        "ConfirmPassword": "Confirm Password"
     },
     "Mobile": {
         "AboutPiwikMobile": "About Matomo Mobile",
