@@ -100,6 +100,7 @@ class Goals extends \Piwik\Plugin
             'SitesManager.deleteSite.end'            => 'deleteSiteGoals',
             'Translate.getClientSideTranslationKeys' => 'getClientSideTranslationKeys',
             'Metrics.getDefaultMetricTranslations'   => 'addMetricTranslations',
+            'Metrics.getDefaultMetricSemanticTypes'  => 'addMetricSemanticTypes',
             'Category.addSubcategories'              => 'addSubcategories',
             'Metric.addMetrics'                      => 'addMetrics',
             'Metric.addComputedMetrics'              => 'addComputedMetrics',
@@ -225,6 +226,23 @@ class Goals extends \Piwik\Plugin
         $translations = array_merge($translations, $metrics);
     }
 
+    public function addMetricSemanticTypes(array &$types): void
+    {
+        $goalMetricTypes = array(
+            'orders'            => Dimension::TYPE_NUMBER,
+            'ecommerce_revenue' => Dimension::TYPE_MONEY,
+            'quantity'          => Dimension::TYPE_NUMBER,
+            'revenue_subtotal'  => Dimension::TYPE_MONEY,
+            'revenue_tax'       => Dimension::TYPE_MONEY,
+            'revenue_shipping'  => Dimension::TYPE_MONEY,
+            'revenue_discount'  => Dimension::TYPE_MONEY,
+            'avg_order_revenue' => Dimension::TYPE_MONEY,
+            'items'             => Dimension::TYPE_NUMBER,
+        );
+
+        $types = array_merge($types, $goalMetricTypes);
+    }
+
     /**
      * Delete goals recorded for this site
      */
@@ -256,6 +274,13 @@ class Goals extends \Piwik\Plugin
             'revenue'         => Piwik::translate('General_ColumnRevenue')
         );
 
+        $goalMetricTypes = [
+            'revenue_per_visit' => Dimension::TYPE_MONEY,
+            'nb_conversions' => Dimension::TYPE_NUMBER,
+            'conversion_rate' => Dimension::TYPE_PERCENT,
+            'revenue' => Dimension::TYPE_MONEY,
+        ];
+
         $reportsWithGoals = self::getAllReportsWithGoalMetrics();
 
         foreach ($reportsWithGoals as $reportWithGoals) {
@@ -269,9 +294,11 @@ class Goals extends \Piwik\Plugin
 
                 if ($apiReportToUpdate['module'] == $reportWithGoals['module']
                     && $apiReportToUpdate['action'] == $reportWithGoals['action']
-                    && empty($apiReportToUpdate['parameters'])) {
+                    && empty($apiReportToUpdate['parameters'])
+                ) {
                     $apiReportToUpdate['metricsGoal'] = $goalMetrics;
                     $apiReportToUpdate['processedMetricsGoal'] = $goalProcessedMetrics;
+                    $apiReportToUpdate['metricTypesGoal'] = $goalMetricTypes;
                     break;
                 }
             }

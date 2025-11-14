@@ -135,9 +135,14 @@ class DataSubjects
         $invalidator = StaticContainer::get('Piwik\Archive\ArchiveInvalidator');
 
         foreach ($datesToInvalidateByIdSite as $idSite => $visitDates) {
+            $idSites = [$idSite];
+            Piwik::postEvent('Archiving.getIdSitesToMarkArchivesAsInvalidated', array(&$idSites, $visitDates, null, null, null, $isPrivacyDeleteData = true));
             foreach ($visitDates as $dateStr) {
                 $visitDate = Date::factory($dateStr);
-                $invalidator->rememberToInvalidateArchivedReportsLater($idSite, $visitDate);
+                foreach ($idSites as $siteId) {
+                    $invalidator->rememberToInvalidateArchivedReportsLater($siteId, $visitDate);
+                }
+
             }
         }
     }
@@ -206,9 +211,17 @@ class DataSubjects
 
             [$where, $bind] = $generateWhere($tableToSelect);
 
-            $sql = "DELETE $logTableName FROM " . $this->makeFromStatement($from) . " WHERE $where";
+            if (count($from) === 1) {
+                $tblFrom = Common::prefixTable($logTableName);
+                $where = str_replace($logTableName . '.', $tblFrom . '.', $where);
+                $result = Db::deleteAllRows($tblFrom, ' WHERE ' . $where, '', 25000, $bind);
+            } else {
+                $tblFrom = $this->makeFromStatement($from);
 
-            $result = Db::query($sql, $bind)->rowCount();
+                // You cannot use ORDER BY or LIMIT in a multiple-table DELETE. We have to delete it all at once
+                $sql = "DELETE $logTableName FROM $tblFrom WHERE $where";
+                $result = Db::query($sql, $bind)->rowCount();
+            }
 
             $results[$logTableName] = $result;
         }

@@ -94,7 +94,11 @@ class Updater
 
         $newVersion = $this->getLatestVersion();
         $url = $this->getArchiveUrl($newVersion, $https);
-        $messages = array();
+        $messages = [];
+
+        $pluginManager = PluginManager::getInstance();
+        $activatedPlugins = $pluginManager->getActivatedPlugins();
+        Option::set('OneClickUpdate_ActivatedPlugins', json_encode($activatedPlugins));
 
         try {
             $archiveFile = $this->downloadArchive($newVersion, $url);
@@ -147,15 +151,6 @@ class Updater
             }
         }
 
-        try {
-            $disabledPluginNames = $this->disableIncompatiblePlugins($newVersion);
-            if (!empty($disabledPluginNames)) {
-                $messages[] = $this->translator->translate('CoreUpdater_DisablingIncompatiblePlugins', implode(', ', $disabledPluginNames));
-            }
-        } catch (Exception $e) {
-            throw new UpdaterException($e, $messages);
-        }
-
         return $messages;
     }
 
@@ -166,41 +161,84 @@ class Updater
         if (!Marketplace::isMarketplaceEnabled()) {
             $messages[] = 'Marketplace is disabled. Not updating any plugins.';
             // prevent error Entry "Piwik\Plugins\Marketplace\Api\Client" cannot be resolved: Entry "Piwik\Plugins\Marketplace\Api\Service" cannot be resolved
-            return $messages;
+        } else {
+            if (!isset($newVersion)) {
+                $newVersion = Version::VERSION;
+            }
+
+            // we also need to make sure to create a new instance here as otherwise we would change the "global"
+            // environment, but we only want to change piwik version temporarily for this task here
+            $environment = StaticContainer::getContainer()->make('Piwik\Plugins\Marketplace\Environment');
+            $environment->setPiwikVersion($newVersion);
+            /** @var \Piwik\Plugins\Marketplace\Api\Client $marketplaceClient */
+            $marketplaceClient = StaticContainer::getContainer()->make('Piwik\Plugins\Marketplace\Api\Client', [
+                'environment' => $environment
+            ]);
+
+            try {
+                $messages[]    = $this->translator->translate('CoreUpdater_CheckingForPluginUpdates');
+                $pluginManager = PluginManager::getInstance();
+                $pluginManager->loadAllPluginsAndGetTheirInfo();
+                $loadedPlugins = $pluginManager->getLoadedPlugins();
+
+                $marketplaceClient->clearAllCacheEntries();
+                $pluginsWithUpdate = $marketplaceClient->checkUpdates($loadedPlugins);
+
+                foreach ($pluginsWithUpdate as $pluginWithUpdate) {
+                    $pluginName      = $pluginWithUpdate['name'];
+                    $messages[]      = $this->translator->translate(
+                        'CoreUpdater_UpdatingPluginXToVersionY',
+                        [$pluginName, $pluginWithUpdate['version']]
+                    );
+                    $pluginInstaller = new PluginInstaller($marketplaceClient);
+                    $pluginInstaller->installOrUpdatePluginFromMarketplace($pluginName);
+                }
+            } catch (MarketplaceApi\Exception $e) {
+                // there is a problem with the connection to the server, ignore for now
+            } catch (Exception $e) {
+                throw new UpdaterException($e, $messages);
+            }
         }
 
-        if (!isset($newVersion)) {
-            $newVersion = Version::VERSION;
+        // get a list of previously activated plugins and try to reactivate them if there are no missing requirements
+        $previouslyActivePlugins = Option::get('OneClickUpdate_ActivatedPlugins');
+        if (false !== $previouslyActivePlugins) {
+            $previouslyActivePlugins = json_decode($previouslyActivePlugins, true);
+        } else {
+            $previouslyActivePlugins = [];
+        }
+        Option::delete('OneClickUpdate_ActivatedPlugins');
+
+        $reactivatedPlugins = [];
+        if (!empty($previouslyActivePlugins)) {
+            $pluginManager = PluginManager::getInstance();
+            foreach ($previouslyActivePlugins as $previouslyActivePluginName) {
+                if (!$pluginManager->isPluginActivated($previouslyActivePluginName)) {
+                    try {
+                        $plugin = $pluginManager->loadPlugin($previouslyActivePluginName);
+                        if (empty($plugin->getMissingDependencies($newVersion))) {
+                            $pluginManager->activatePlugin($previouslyActivePluginName);
+                            $reactivatedPlugins[] = $previouslyActivePluginName;
+                        }
+                    } catch (\Throwable $e) {
+                        // noop - we will try to reactivate other plugins in the list.
+                    }
+                }
+            }
         }
 
-        // we also need to make sure to create a new instance here as otherwise we would change the "global"
-        // environment, but we only want to change piwik version temporarily for this task here
-        $environment = StaticContainer::getContainer()->make('Piwik\Plugins\Marketplace\Environment');
-        $environment->setPiwikVersion($newVersion);
-        /** @var \Piwik\Plugins\Marketplace\Api\Client $marketplaceClient */
-        $marketplaceClient = StaticContainer::getContainer()->make('Piwik\Plugins\Marketplace\Api\Client', array(
-            'environment' => $environment
-        ));
+        if (!empty($reactivatedPlugins)) {
+            $messages[] = $this->translator->translate('CoreUpdater_ReactivatedPlugins', implode(', ', $reactivatedPlugins));
+        }
 
         try {
-            $messages[] = $this->translator->translate('CoreUpdater_CheckingForPluginUpdates');
-            $pluginManager = PluginManager::getInstance();
-            $pluginManager->loadAllPluginsAndGetTheirInfo();
-            $loadedPlugins = $pluginManager->getLoadedPlugins();
-
-            $marketplaceClient->clearAllCacheEntries();
-            $pluginsWithUpdate = $marketplaceClient->checkUpdates($loadedPlugins);
-
-            foreach ($pluginsWithUpdate as $pluginWithUpdate) {
-                $pluginName = $pluginWithUpdate['name'];
-                $messages[] = $this->translator->translate('CoreUpdater_UpdatingPluginXToVersionY',
-                    array($pluginName, $pluginWithUpdate['version']));
-                $pluginInstaller = new PluginInstaller($marketplaceClient);
-                $pluginInstaller->installOrUpdatePluginFromMarketplace($pluginName);
+            // incompatible plugins may have already been disabled in oneClickUpdatePartTwo
+            // if this might have failed we try it here again.
+            $disabledPluginNames = $this->disableIncompatiblePlugins($newVersion);
+            if (!empty($disabledPluginNames)) {
+                $messages[] = $this->translator->translate('CoreUpdater_DisablingIncompatiblePlugins', implode(', ', $disabledPluginNames));
             }
-        } catch (MarketplaceApi\Exception $e) {
-            // there is a problem with the connection to the server, ignore for now
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             throw new UpdaterException($e, $messages);
         }
 
